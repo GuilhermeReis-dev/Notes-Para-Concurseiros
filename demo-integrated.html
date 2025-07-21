@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF Notes with Annotations - Demo</title>
+    <link rel="stylesheet" href="assets/css/annotations.css">
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f3f4f6;
+        }
+
+        .header {
+            background: white;
+            border-bottom: 1px solid #e5e7eb;
+            padding: 16px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .header button {
+            padding: 8px 16px;
+            border: 1px solid #d1d5db;
+            background: white;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .header button:hover {
+            background: #f9fafb;
+        }
+
+        .header .primary {
+            background: #3b82f6;
+            color: white;
+            border-color: #3b82f6;
+        }
+
+        .header .primary:hover {
+            background: #2563eb;
+        }
+
+        .note-editor {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .note-title {
+            width: 100%;
+            border: none;
+            font-size: 24px;
+            font-weight: bold;
+            padding: 12px 16px;
+            background: white;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .note-body {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            min-height: 600px;
+        }
+
+        .simulated-pdf-page {
+            width: 100%;
+            height: 400px;
+            background: #fafafa;
+            border: 1px solid #e5e7eb;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            color: #6b7280;
+            position: relative;
+            background-image: 
+                linear-gradient(#e5e7eb 1px, transparent 1px),
+                linear-gradient(90deg, #e5e7eb 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+
+        .page-content {
+            text-align: center;
+            background: rgba(255,255,255,0.9);
+            padding: 20px;
+            border-radius: 4px;
+        }
+
+        .dark .simulated-pdf-page {
+            background: #374151;
+            border-color: #4b5563;
+            color: #9ca3af;
+        }
+
+        .dark .page-content {
+            background: rgba(55,65,81,0.9);
+        }
+
+        .toggle-theme {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            z-index: 1001;
+            padding: 8px;
+            background: white;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+
+        .dark .toggle-theme {
+            background: #374151;
+            border-color: #4b5563;
+            color: #f3f4f6;
+        }
+
+        /* Dark mode */
+        .dark {
+            background: #111827;
+            color: #f3f4f6;
+        }
+
+        .dark .header {
+            background: #1f2937;
+            border-color: #374151;
+        }
+
+        .dark .header button {
+            background: #374151;
+            border-color: #4b5563;
+            color: #f3f4f6;
+        }
+
+        .dark .header button:hover {
+            background: #4b5563;
+        }
+
+        .dark .note-title,
+        .dark .note-body {
+            background: #1f2937;
+            color: #f3f4f6;
+        }
+    </style>
+</head>
+<body>
+    <button class="toggle-theme" onclick="toggleTheme()">🌙</button>
+    
+    <div class="header">
+        <button onclick="goBack()">← Voltar</button>
+        <input type="text" class="note-title" value="Mathematical Formulas - Chapter 3" readonly>
+        <button class="primary">💾 Salvar</button>
+        <button onclick="exportPDF()">📄 Exportar</button>
+    </div>
+
+    <div class="note-editor">
+        <div class="note-body" id="note-body">
+            <p>Início do documento PDF. Suas anotações podem ser adicionadas aqui.</p>
+            
+            <!-- Simulated PDF Page 1 -->
+            <div class="pdf-page-container" data-page="0">
+                <div class="simulated-pdf-page" data-pdf-source="demo.pdf" data-page-index="0">
+                    <div class="page-content">
+                        <h3>Mathematics - Chapter 3</h3>
+                        <p>Quadratic Equations</p>
+                        <p>ax² + bx + c = 0</p>
+                        <p>Where a ≠ 0</p>
+                        <br>
+                        <p><strong>Page 1 of 3</strong></p>
+                        <p style="font-size: 12px; color: #888;">Draw annotations on this page!</p>
+                    </div>
+                </div>
+                <canvas class="annotation-canvas" data-page="0"></canvas>
+            </div>
+
+            <!-- Simulated PDF Page 2 -->
+            <div class="pdf-page-container" data-page="1">
+                <div class="simulated-pdf-page" data-pdf-source="demo.pdf" data-page-index="1">
+                    <div class="page-content">
+                        <h3>Solutions Methods</h3>
+                        <p>1. Factoring</p>
+                        <p>2. Completing the square</p>
+                        <p>3. Quadratic formula:</p>
+                        <p>x = (-b ± √(b² - 4ac)) / 2a</p>
+                        <br>
+                        <p><strong>Page 2 of 3</strong></p>
+                        <p style="font-size: 12px; color: #888;">Add your notes here!</p>
+                    </div>
+                </div>
+                <canvas class="annotation-canvas" data-page="1"></canvas>
+            </div>
+
+            <!-- Simulated PDF Page 3 -->
+            <div class="pdf-page-container" data-page="2">
+                <div class="simulated-pdf-page" data-pdf-source="demo.pdf" data-page-index="2">
+                    <div class="page-content">
+                        <h3>Examples</h3>
+                        <p>Example 1: x² - 5x + 6 = 0</p>
+                        <p>Solution: x = 2 or x = 3</p>
+                        <br>
+                        <p>Example 2: 2x² + 3x - 2 = 0</p>
+                        <p>Solution: x = 1/2 or x = -2</p>
+                        <br>
+                        <p><strong>Page 3 of 3</strong></p>
+                        <p style="font-size: 12px; color: #888;">Practice problems area</p>
+                    </div>
+                </div>
+                <canvas class="annotation-canvas" data-page="2"></canvas>
+            </div>
+
+            <p>Fim do documento.</p>
+        </div>
+    </div>
+
+    <!-- Include the annotation system -->
+    <script type="module">
+        // Simplified PDF Annotation System for Demo
+        class DemoPDFAnnotation {
+            constructor() {
+                this.currentTool = 'pen';
+                this.currentColor = '#000000';
+                this.currentLineWidth = 2;
+                this.annotations = new Map();
+                
+                this.colors = [
+                    { name: 'Branco', value: '#FFFFFF' },
+                    { name: 'Preto', value: '#000000' },
+                    { name: 'Azul', value: '#3B82F6' },
+                    { name: 'Verde', value: '#22C55E' },
+                    { name: 'Vermelho', value: '#EF4444' },
+                    { name: 'Amarelo', value: '#EAB308' }
+                ];
+                
+                this.lineWidths = [
+                    { name: 'Fina', value: 1 },
+                    { name: 'Média', value: 2 },
+                    { name: 'Grossa', value: 4 }
+                ];
+
+                this.init();
+            }
+
+            init() {
+                this.createToolbar();
+                this.setupCanvases();
+                this.setupEventListeners();
+            }
+
+            createToolbar() {
+                const toolbarHTML = `
+                    <div id="annotation-toolbar" class="annotation-toolbar">
+                        <div class="toolbar-section">
+                            <h4 class="toolbar-title">Caneta</h4>
+                            <div class="color-palette">
+                                ${this.colors.map(color => `
+                                    <button class="color-btn ${color.value === this.currentColor ? 'active' : ''}" 
+                                            data-color="${color.value}" 
+                                            style="background-color: ${color.value}"
+                                            title="${color.name}">
+                                    </button>
+                                `).join('')}
+                            </div>
+                            <div class="line-width-controls">
+                                ${this.lineWidths.map(width => `
+                                    <button class="width-btn ${width.value === this.currentLineWidth ? 'active' : ''}" 
+                                            data-width="${width.value}"
+                                            title="${width.name}">
+                                        <div class="width-preview" style="height: ${width.value + 1}px; background-color: ${this.currentColor};"></div>
+                                    </button>
+                                `).join('')}
+                            </div>
+                        </div>
+                        <div class="toolbar-section">
+                            <h4 class="toolbar-title">Ferramentas</h4>
+                            <div class="tool-buttons">
+                                <button class="tool-btn active" data-tool="pen" title="Caneta">
+                                    <i class="fas fa-pen">✏️</i>
+                                </button>
+                                <button class="tool-btn" data-tool="eraser" title="Borracha">
+                                    <i class="fas fa-eraser">🧽</i>
+                                </button>
+                                <button class="tool-btn" data-tool="clear" title="Limpar Página">
+                                    <i class="fas fa-trash">🗑️</i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                document.body.insertAdjacentHTML('beforeend', toolbarHTML);
+            }
+
+            setupCanvases() {
+                const containers = document.querySelectorAll('.pdf-page-container');
+                containers.forEach((container, pageIndex) => {
+                    const pdfPage = container.querySelector('.simulated-pdf-page');
+                    const canvas = container.querySelector('.annotation-canvas');
+                    
+                    const updateCanvasSize = () => {
+                        const rect = pdfPage.getBoundingClientRect();
+                        canvas.width = rect.width;
+                        canvas.height = rect.height;
+                        canvas.style.width = rect.width + 'px';
+                        canvas.style.height = rect.height + 'px';
+                    };
+                    
+                    updateCanvasSize();
+                    window.addEventListener('resize', updateCanvasSize);
+                    
+                    this.setupCanvasDrawing(canvas, pageIndex);
+                });
+            }
+
+            setupCanvasDrawing(canvas, pageIndex) {
+                const ctx = canvas.getContext('2d');
+                let isDrawing = false;
+
+                const getEventPos = (e) => {
+                    const rect = canvas.getBoundingClientRect();
+                    return {
+                        x: e.clientX - rect.left,
+                        y: e.clientY - rect.top
+                    };
+                };
+
+                const startDrawing = (e) => {
+                    if (this.currentTool === 'pen' || this.currentTool === 'eraser') {
+                        isDrawing = true;
+                        const pos = getEventPos(e);
+                        
+                        if (this.currentTool === 'pen') {
+                            ctx.globalCompositeOperation = 'source-over';
+                            ctx.strokeStyle = this.currentColor;
+                            ctx.lineWidth = this.currentLineWidth;
+                        } else {
+                            ctx.globalCompositeOperation = 'destination-out';
+                            ctx.lineWidth = this.currentLineWidth * 3;
+                        }
+                        
+                        ctx.lineCap = 'round';
+                        ctx.lineJoin = 'round';
+                        ctx.beginPath();
+                        ctx.moveTo(pos.x, pos.y);
+                    }
+                };
+
+                const draw = (e) => {
+                    if (!isDrawing) return;
+                    const pos = getEventPos(e);
+                    ctx.lineTo(pos.x, pos.y);
+                    ctx.stroke();
+                };
+
+                const stopDrawing = () => {
+                    isDrawing = false;
+                };
+
+                canvas.addEventListener('mousedown', startDrawing);
+                canvas.addEventListener('mousemove', draw);
+                canvas.addEventListener('mouseup', stopDrawing);
+                canvas.addEventListener('mouseout', stopDrawing);
+
+                // Touch support
+                canvas.addEventListener('touchstart', (e) => {
+                    e.preventDefault();
+                    const touch = e.touches[0];
+                    const mouseEvent = new MouseEvent('mousedown', {
+                        clientX: touch.clientX,
+                        clientY: touch.clientY
+                    });
+                    canvas.dispatchEvent(mouseEvent);
+                });
+
+                canvas.addEventListener('touchmove', (e) => {
+                    e.preventDefault();
+                    const touch = e.touches[0];
+                    const mouseEvent = new MouseEvent('mousemove', {
+                        clientX: touch.clientX,
+                        clientY: touch.clientY
+                    });
+                    canvas.dispatchEvent(mouseEvent);
+                });
+
+                canvas.addEventListener('touchend', (e) => {
+                    e.preventDefault();
+                    canvas.dispatchEvent(new MouseEvent('mouseup', {}));
+                });
+            }
+
+            setupEventListeners() {
+                document.addEventListener('click', (e) => {
+                    if (e.target.classList.contains('color-btn')) {
+                        this.setColor(e.target.dataset.color);
+                    }
+                    
+                    if (e.target.closest('.width-btn')) {
+                        const btn = e.target.closest('.width-btn');
+                        this.setLineWidth(parseInt(btn.dataset.width));
+                    }
+                    
+                    if (e.target.closest('.tool-btn')) {
+                        const btn = e.target.closest('.tool-btn');
+                        const tool = btn.dataset.tool;
+                        if (tool === 'clear') {
+                            this.clearCurrentPage();
+                        } else {
+                            this.setTool(tool);
+                        }
+                    }
+                });
+            }
+
+            setColor(color) {
+                this.currentColor = color;
+                this.updateColorButtons();
+                this.updateWidthPreviews();
+            }
+
+            setLineWidth(width) {
+                this.currentLineWidth = width;
+                this.updateWidthButtons();
+            }
+
+            setTool(tool) {
+                this.currentTool = tool;
+                this.updateToolButtons();
+                this.updateCanvasCursors();
+            }
+
+            updateColorButtons() {
+                document.querySelectorAll('.color-btn').forEach(btn => {
+                    btn.classList.toggle('active', btn.dataset.color === this.currentColor);
+                });
+            }
+
+            updateWidthButtons() {
+                document.querySelectorAll('.width-btn').forEach(btn => {
+                    btn.classList.toggle('active', parseInt(btn.dataset.width) === this.currentLineWidth);
+                });
+            }
+
+            updateWidthPreviews() {
+                document.querySelectorAll('.width-preview').forEach(preview => {
+                    preview.style.backgroundColor = this.currentColor;
+                });
+            }
+
+            updateToolButtons() {
+                document.querySelectorAll('.tool-btn').forEach(btn => {
+                    btn.classList.toggle('active', btn.dataset.tool === this.currentTool);
+                });
+            }
+
+            updateCanvasCursors() {
+                const canvases = document.querySelectorAll('.annotation-canvas');
+                canvases.forEach(canvas => {
+                    canvas.classList.toggle('eraser-mode', this.currentTool === 'eraser');
+                });
+            }
+
+            clearCurrentPage() {
+                // Find visible page and clear it
+                const canvases = document.querySelectorAll('.annotation-canvas');
+                canvases.forEach(canvas => {
+                    const rect = canvas.getBoundingClientRect();
+                    const viewportHeight = window.innerHeight;
+                    const isVisible = rect.top < viewportHeight && rect.bottom > 0;
+                    
+                    if (isVisible) {
+                        const ctx = canvas.getContext('2d');
+                        ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    }
+                });
+            }
+        }
+
+        // Initialize the annotation system
+        window.annotationSystem = new DemoPDFAnnotation();
+    </script>
+
+    <script>
+        function toggleTheme() {
+            document.body.classList.toggle('dark');
+            const btn = document.querySelector('.toggle-theme');
+            btn.textContent = document.body.classList.contains('dark') ? '☀️' : '🌙';
+        }
+
+        function goBack() {
+            alert('Voltando para a lista de pastas...');
+        }
+
+        function exportPDF() {
+            alert('Exportando PDF com anotações...');
+        }
+    </script>
+</body>
+</html>
