@@ -6,6 +6,7 @@ import { UIComponents } from './modules/ui-components.js';
 import { FolderManager } from './modules/folder-manager.js';
 import { PDFHandler } from './modules/pdf-handler.js';
 import { NoteEditor } from './modules/note-editor.js';
+import { PDFAnnotation } from './modules/pdf-annotation.js';
 
 class GeminiNotesApp {
     constructor() {
@@ -16,6 +17,7 @@ class GeminiNotesApp {
         this.folderManager = null;
         this.pdfHandler = null;
         this.noteEditor = null;
+        this.pdfAnnotation = null;
 
         this.isInitialized = false;
     }
@@ -43,9 +45,10 @@ class GeminiNotesApp {
             }
 
             // Initialize feature modules
-            this.pdfHandler = new PDFHandler(this.supabaseClient, this.ui);
+            this.pdfAnnotation = new PDFAnnotation(this.supabaseClient, this.ui);
+            this.pdfHandler = new PDFHandler(this.supabaseClient, this.ui, this.pdfAnnotation);
             this.folderManager = new FolderManager(this.supabaseClient, this.ui);
-            this.noteEditor = new NoteEditor(this.supabaseClient, this.ui, this.pdfHandler);
+            this.noteEditor = new NoteEditor(this.supabaseClient, this.ui, this.pdfHandler, this.pdfAnnotation);
 
             // Setup inter-module communication
             this.setupModuleCallbacks();
