@@ -2,9 +2,10 @@
 import { PDFJS_CONFIG } from '../config/supabase-config.js';
 
 export class PDFHandler {
-    constructor(supabaseClient, uiComponents) {
+    constructor(supabaseClient, uiComponents, pdfAnnotation) {
         this.supabaseClient = supabaseClient;
         this.ui = uiComponents;
+        this.pdfAnnotation = pdfAnnotation;
         
         this.importPdfBtn = document.getElementById('import-pdf-btn');
         this.importPdfInput = document.getElementById('import-pdf-input');
@@ -110,11 +111,18 @@ export class PDFHandler {
                 }).promise;
                 
                 const imgDataUrl = canvas.toDataURL('image/jpeg', 0.9);
-                htmlContent += `<img src="${imgDataUrl}" alt="Página ${i} do PDF" data-pdf-source="${pdfUrl}"/><br/>`;
+                htmlContent += `<img src="${imgDataUrl}" alt="Página ${i} do PDF" data-pdf-source="${pdfUrl}" data-page-index="${i-1}"/><br/>`;
             }
             
             htmlContent += '<p>Fim do documento.</p>';
             targetElement.innerHTML = htmlContent;
+            
+            // Setup annotations for PDF pages after content is set
+            if (this.pdfAnnotation) {
+                setTimeout(() => {
+                    this.setupAnnotationsForRenderedPdf(targetElement);
+                }, 100);
+            }
             
         } catch (error) {
             console.error("Error rendering PDF:", error);
@@ -172,6 +180,14 @@ export class PDFHandler {
         } finally {
             this.ui.hideLoading();
         }
+    }
+
+    setupAnnotationsForRenderedPdf(targetElement) {
+        const pdfImages = targetElement.querySelectorAll('img[data-pdf-source]');
+        pdfImages.forEach((img, index) => {
+            const pageIndex = parseInt(img.getAttribute('data-page-index')) || index;
+            this.pdfAnnotation.setupPdfPageAnnotation(img, pageIndex);
+        });
     }
 
     // Callbacks (to be set by main app)

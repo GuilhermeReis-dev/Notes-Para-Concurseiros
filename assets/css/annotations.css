@@ -1,0 +1,208 @@
+/* PDF Annotation Styles */
+
+.annotation-toolbar {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: rgba(255, 255, 255, 0.95);
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 12px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    z-index: 1000;
+    min-width: 200px;
+    backdrop-filter: blur(8px);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.dark .annotation-toolbar {
+    background: rgba(31, 41, 55, 0.95);
+    border-color: #4b5563;
+    color: #f3f4f6;
+}
+
+.annotation-toolbar.hidden {
+    display: none;
+}
+
+.toolbar-section {
+    margin-bottom: 12px;
+}
+
+.toolbar-section:last-child {
+    margin-bottom: 0;
+}
+
+.toolbar-title {
+    font-size: 12px;
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: #6b7280;
+}
+
+.dark .toolbar-title {
+    color: #9ca3af;
+}
+
+.color-palette {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 4px;
+    margin-bottom: 8px;
+}
+
+.color-btn {
+    width: 24px;
+    height: 24px;
+    border: 2px solid #e5e7eb;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    position: relative;
+}
+
+.color-btn:hover, .color-btn.active {
+    border-color: #3b82f6;
+    transform: scale(1.1);
+}
+
+/* Special styling for white color button to make it visible */
+.color-btn[data-color="#FFFFFF"] {
+    border: 2px solid #d1d5db;
+    background: linear-gradient(45deg, #ffffff 47%, #f3f4f6 47%, #f3f4f6 53%, #ffffff 53%);
+}
+
+.color-btn[data-color="#FFFFFF"]:hover,
+.color-btn[data-color="#FFFFFF"].active {
+    border-color: #3b82f6;
+}
+
+.dark .color-btn {
+    border-color: #4b5563;
+}
+
+.dark .color-btn:hover, .dark .color-btn.active {
+    border-color: #3b82f6;
+}
+
+.line-width-controls {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 8px;
+}
+
+.width-btn {
+    flex: 1;
+    height: 24px;
+    border: 1px solid #e5e7eb;
+    border-radius: 4px;
+    background: white;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+
+.width-btn:hover, .width-btn.active {
+    border-color: #3b82f6;
+    background: #eff6ff;
+}
+
+.dark .width-btn {
+    background: #374151;
+    border-color: #4b5563;
+}
+
+.dark .width-btn:hover, .dark .width-btn.active {
+    border-color: #3b82f6;
+    background: #1e3a8a;
+}
+
+.width-preview {
+    width: 16px;
+    border-radius: 2px;
+    transition: background-color 0.2s ease;
+}
+
+.tool-buttons {
+    display: flex;
+    gap: 4px;
+}
+
+.tool-btn {
+    width: 32px;
+    height: 32px;
+    border: 1px solid #e5e7eb;
+    border-radius: 4px;
+    background: white;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+    color: #6b7280;
+    font-size: 14px;
+}
+
+.tool-btn:hover, .tool-btn.active {
+    border-color: #3b82f6;
+    background: #eff6ff;
+    color: #3b82f6;
+}
+
+.dark .tool-btn {
+    background: #374151;
+    border-color: #4b5563;
+    color: #9ca3af;
+}
+
+.dark .tool-btn:hover, .dark .tool-btn.active {
+    border-color: #3b82f6;
+    background: #1e3a8a;
+    color: #3b82f6;
+}
+
+.pdf-page-container {
+    position: relative;
+    margin-bottom: 20px;
+}
+
+.annotation-canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    cursor: crosshair;
+    z-index: 10;
+    pointer-events: auto;
+}
+
+.annotation-canvas.eraser-mode {
+    cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20"><circle cx="10" cy="10" r="8" fill="none" stroke="black" stroke-width="2"/></svg>') 10 10, auto;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .annotation-toolbar {
+        top: 10px;
+        right: 10px;
+        min-width: 180px;
+        padding: 10px;
+    }
+    
+    .color-palette {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 3px;
+    }
+    
+    .color-btn {
+        width: 20px;
+        height: 20px;
+    }
+    
+    .tool-btn {
+        width: 28px;
+        height: 28px;
+        font-size: 12px;
+    }
+}

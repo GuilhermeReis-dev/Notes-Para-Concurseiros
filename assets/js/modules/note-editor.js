@@ -1,9 +1,10 @@
 // Note Editor Module
 export class NoteEditor {
-    constructor(supabaseClient, uiComponents, pdfHandler) {
+    constructor(supabaseClient, uiComponents, pdfHandler, pdfAnnotation) {
         this.supabaseClient = supabaseClient;
         this.ui = uiComponents;
         this.pdfHandler = pdfHandler;
+        this.pdfAnnotation = pdfAnnotation;
 
         this.activeNoteId = null;
         this.saveTimeout = null;
@@ -57,8 +58,16 @@ export class NoteEditor {
             // Handle PDF notes
             if (note.pdfUrl && (!this.noteBodyEl?.innerHTML || this.noteBodyEl.innerHTML.includes('<p>Carregando PDF...</p>'))) {
                 await this.pdfHandler.renderPdfInEditor(note.pdfUrl, this.noteBodyEl);
+                // Initialize annotations for PDF content
+                if (this.pdfAnnotation) {
+                    this.pdfAnnotation.initializeForNote(noteId, note.body);
+                }
             } else if (this.noteBodyEl) {
                 this.noteBodyEl.innerHTML = note.body || '';
+                // Check if existing note has PDF content and initialize annotations
+                if (this.pdfAnnotation && this.pdfAnnotation.hasPdfContent(note.body)) {
+                    this.pdfAnnotation.initializeForNote(noteId, note.body);
+                }
             }
 
             // Update save status
@@ -178,6 +187,11 @@ export class NoteEditor {
     }
 
     closeEditor() {
+        // Close annotations if active
+        if (this.pdfAnnotation && this.activeNoteId) {
+            this.pdfAnnotation.closeAnnotations();
+        }
+
         this.activeNoteId = null;
 
         // Clear any pending save
