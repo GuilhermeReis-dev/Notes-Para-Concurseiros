@@ -1,0 +1,1487 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gemini Notes - Solução Grok3</title>
+
+    <!-- External Dependencies -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+    <style>
+        * {
+            box-sizing: border-box;
+            font-family: Arial, Helvetica, sans-serif;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+
+        #app {
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .loader {
+            border: 4px solid #f3f4f6;
+            border-top: 4px solid #3b82f6;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        .modal-backdrop {
+            backdrop-filter: blur(4px);
+        }
+
+        .clamp-3 {
+            display: -webkit-box;
+            -webkit-line-clamp: 3;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        #zoom-wrapper {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+        }
+
+        .pdf-page-image {
+            background-color: white;
+
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            position: relative;
+            z-index: 5;
+        }
+
+        .dark .pdf-page-image {
+            border-color: #374151;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+        }
+
+        .pdf-page-image img {
+            width: 100%;
+            display: block;
+            background: white;
+            /* Garante que a imagem tenha fundo branco */
+        }
+
+        .pdf-container {
+            background-color: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .dark .pdf-container {
+            background-color: #1f2937;
+            /* Fundo escuro sólido */
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+        }
+
+
+        #note-body {
+            transform-origin: center top;
+            max-width: 100%;
+            width: 100%;
+            box-sizing: border-box;
+            transition: transform 0.2s ease;
+            padding: 20px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 6px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        .dark #note-body {
+            background-color: #1f2937;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        }
+
+        .item-grid-card {
+            transition: all 0.2s ease;
+            border: 1px solid transparent;
+        }
+
+        .item-grid-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+            border-color: #e5e7eb;
+        }
+
+        .dark .item-grid-card:hover {
+            border-color: #4b5563;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+        }
+
+        /* Garantir que as views sejam exibidas corretamente */
+        .view-container {
+            width: 100%;
+            height: 100%;
+        }
+
+        .view-hidden {
+            display: none !important;
+        }
+
+        .view-visible {
+            display: flex !important;
+            flex-direction: column;
+        }
+
+        /* Loading overlay */
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.9);
+            z-index: 9999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+        }
+
+        .dark .loading-overlay {
+            background: rgba(17, 24, 39, 0.9);
+        }
+
+        /* Zoom controls styling - MELHORADOS CONFORME ESPECIFICAÇÃO */
+        #zoom-controls {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            z-index: 1000;
+            background: rgba(0, 0, 0, 0.7);
+            border-radius: 6px;
+            padding: 5px 8px;
+            /* Aumentado de 3px 5px */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 3px;
+            /* Aumentado de 2px */
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+        }
+
+        .zoom-btn {
+            width: 24px;
+            /* Aumentado de 14px */
+            height: 24px;
+            /* Aumentado de 14px */
+            border-radius: 2px;
+            background: transparent;
+            border: none;
+            color: white;
+            font-size: 14px;
+            /* Aumentado de 10px */
+            font-weight: bold;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background-color 0.2s ease;
+        }
+
+        .zoom-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .zoom-btn:active {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        #zoom-level-display {
+            color: white;
+            font-size: 10px;
+            /* Aumentado de 8px */
+            font-weight: 600;
+            padding: 2px 0;
+            min-width: 24px;
+            /* Aumentado de 14px */
+            text-align: center;
+        }
+
+
+        .note-editor-container {
+            background-color: #f3f4f6;
+            display: flex;
+            justify-content: center;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            padding: 30px;
+        }
+
+        .dark .note-editor-container {
+            background-color: #111827;
+        }
+
+        .note-editor-main {
+            overflow-y: auto;
+            height: 100%;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+    </style>
+</head>
+
+<body class="bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-200 transition-colors duration-300">
+
+    <div id="app" class="h-screen w-screen overflow-hidden">
+        <!-- Loading Overlay -->
+        <div id="loading-overlay" class="loading-overlay" style="display: none;">
+            <div class="loader"></div>
+            <p id="loading-text" class="mt-4 text-lg font-medium text-gray-600 dark:text-gray-300">Carregando...</p>
+        </div>
+
+        <!-- Folder View -->
+        <div id="folder-view" class="view-container view-visible">
+            <header class="p-4 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+                <div class="flex justify-between items-center mb-4">
+                    <h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                        <i class="fas fa-feather-alt text-emerald-500"></i> Gemini Notes
+                        <span class="text-sm font-normal text-gray-500 ml-2">Solução Grok3</span>
+                    </h1>
+                    <div class="flex items-center gap-2">
+                        <button id="theme-toggle-btn"
+                            class="w-10 h-10 flex items-center justify-center rounded-lg bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors">
+                            <i id="theme-icon" class="fas fa-moon"></i>
+                        </button>
+                        <button id="import-pdf-btn"
+                            class="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 flex items-center gap-2 transition-colors">
+                            <i class="fas fa-file-import"></i>
+                            <span>Importar PDF</span>
+                        </button>
+                        <button id="new-folder-btn"
+                            class="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 flex items-center gap-2 transition-colors">
+                            <i class="fas fa-folder-plus"></i>
+                            <span>Nova Pasta</span>
+                        </button>
+
+                    </div>
+                </div>
+                <nav id="breadcrumbs" class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+                    <span class="font-semibold text-gray-800 dark:text-gray-100">Início</span>
+                </nav>
+            </header>
+            <main id="folder-contents"
+                class="flex-grow p-6 grid grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-6 overflow-y-auto">
+                <div class="col-span-full text-center text-gray-500 dark:text-gray-400 mt-16">
+                    <i class="fas fa-box-open text-6xl text-gray-300 dark:text-gray-600"></i>
+                    <p class="mt-4 text-2xl font-semibold">Carregando...</p>
+                </div>
+            </main>
+        </div>
+
+        <!-- Note Editor View -->
+        <div id="note-editor-view" class="view-container view-hidden">
+            <header
+                class="p-4 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex items-center gap-4">
+                <button id="back-to-folders-btn"
+                    class="px-3 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 flex items-center gap-2 transition-colors">
+                    <i class="fas fa-arrow-left"></i>
+                    <span>Voltar</span>
+                </button>
+                <button id="export-pdf-btn"
+                    class="px-3 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 flex items-center gap-2 transition-colors">
+                    <i class="fas fa-file-export"></i>
+                    <span>Exportar</span>
+                </button>
+                <input type="text" id="note-title" placeholder="Título da sua nota"
+                    class="flex-1 text-2xl font-bold focus:outline-none bg-transparent text-gray-900 dark:text-gray-100 ml-4">
+                <button id="delete-note-btn"
+                    class="text-gray-400 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-500 p-2 rounded-full transition-colors">
+                    <i class="fas fa-trash-alt fa-lg"></i>
+                </button>
+            </header>
+            <main class="flex-grow overflow-y-auto bg-gray-100 dark:bg-gray-900 note-editor-main">
+                <div class="note-editor-container">
+                    <div id="note-body" contenteditable="true"
+                        class="bg-white dark:bg-gray-800 rounded-lg shadow-md text-gray-800 dark:text-gray-200">
+                        <p aria-placeholder="Digite aqui a sua anotação"></p>
+                    </div>
+                </div>
+            </main>
+            <footer
+                class="p-2 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 text-right text-sm text-gray-400 dark:text-gray-500">
+                <span id="save-status">Pronto para editar</span>
+            </footer>>
+
+            <!-- Zoom Controls - MELHORADOS CONFORME ESPECIFICAÇÃO -->
+            <div id="zoom-controls">
+                <button id="zoom-in-btn" class="zoom-btn" title="Aumentar zoom">+</button>
+                <span id="zoom-level-display">100%</span>
+                <button id="zoom-out-btn" class="zoom-btn" title="Diminuir zoom">−</button>
+            </div>
+        </div>
+
+        <!-- Hidden File Input -->
+        <input type="file" id="import-pdf-input" class="hidden" accept="application/pdf">
+
+        <!-- Modals -->
+        <div id="modal-container">
+            <!-- Info Modal -->
+            <div id="info-modal"
+                class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4 modal-backdrop">
+                <div class="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-xl w-full max-w-sm text-center">
+                    <i id="info-modal-icon" class="text-4xl mb-4"></i>
+                    <h3 id="info-modal-title" class="text-lg font-medium mb-2 text-gray-900 dark:text-gray-100"></h3>
+                    <p id="info-modal-text" class="text-gray-600 dark:text-gray-300 mb-6"></p>
+                    <button id="info-modal-close"
+                        class="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors">OK</button>
+                </div>
+            </div>
+
+            <!-- Input Modal -->
+            <div id="input-modal"
+                class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4 modal-backdrop">
+                <div class="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-xl w-full max-w-sm">
+                    <h3 id="input-modal-title" class="text-lg font-medium mb-4 text-gray-900 dark:text-gray-100"></h3>
+                    <input type="text" id="input-modal-field" placeholder="Nome"
+                        class="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-lg px-3 py-2 mb-4 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                    <div class="flex justify-end gap-2">
+                        <button id="input-modal-cancel"
+                            class="px-4 py-2 bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-100 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500 transition-colors">Cancelar</button>
+                        <button id="input-modal-confirm"
+                            class="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors">Confirmar</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Delete Confirmation Modal -->
+            <div id="delete-confirm-modal"
+                class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4 modal-backdrop">
+                <div class="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-xl w-full max-w-sm text-center">
+                    <i class="fas fa-exclamation-triangle text-4xl text-red-500 mb-4"></i>
+                    <h3 class="text-lg font-medium mb-2 text-gray-900 dark:text-gray-100">Excluir Item</h3>
+                    <p id="delete-modal-text" class="text-gray-600 dark:text-gray-300 mb-6"></p>
+                    <div class="flex justify-center gap-4">
+                        <button id="cancel-delete-btn"
+                            class="px-6 py-2 bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-100 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500 transition-colors">Cancelar</button>
+                        <button id="confirm-delete-btn"
+                            class="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors">Excluir</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Configuration
+        const AppConfig = {
+            supabase: {
+                url: "https://bwcdnivajrtmfzbevgyx.supabase.co",
+                key: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ3Y2RuaXZhanJ0bWZ6YmV2Z3l4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI0NDkyMTgsImV4cCI6MjA2ODAyNTIxOH0.QMWNEWhmWOBNTY3jAa7exibGkL39RtH_Ad_wjoPy0BA"
+            },
+            storage: {
+                userIdKey: 'geminiNotesUserId',
+                themeKey: 'geminiNotesTheme'
+            }
+        };
+
+        // Zoom Controller Class 
+        // Zoom Controller Class - MELHORADO CONFORME ESPECIFICAÇÃO
+        class ZoomController {
+            constructor() {
+                this.currentScale = 1.0;    // Zoom inicial de 100%
+                this.minScale = 0.75;       // Zoom mínimo de 75%
+                this.maxScale = 1.5;        // Zoom máximo de 150%
+                this.zoomStep = 0.1;        // Incremento de 10%
+                this.noteBody = null;       // Elemento de conteúdo
+                this.container = null;      // Container de visualização
+                this.zoomDisplayElement = null;
+            }
+
+            init() {
+                // Identificar elementos principais
+                this.noteBody = document.getElementById('note-body');
+                this.container = document.querySelector('.note-editor-container');
+                this.zoomDisplayElement = document.getElementById('zoom-level-display');
+
+                if (!this.noteBody || !this.container || !this.zoomDisplayElement) {
+                    console.log('🔍 Elementos do zoom não encontrados, tentando novamente...');
+                    setTimeout(() => this.init(), 100);
+                    return;
+                }
+
+                // Garantir que o conteúdo esteja centralizado inicialmente
+                this.setupContainer();
+                this.setupEventListeners();
+                this.applyZoom(1.0); // Iniciar com 100%
+
+                console.log('🔍 Novo Zoom Controller inicializado');
+            }
+
+            setupContainer() {
+                // Configurar o container para centralização adequada
+                if (this.container) {
+                    this.container.style.display = 'flex';
+                    this.container.style.justifyContent = 'center';
+                    this.container.style.width = '100%';
+                    this.container.style.overflow = 'auto';
+                    this.container.style.padding = '30px';
+                }
+
+                // Configurar o elemento note-body
+                if (this.noteBody) {
+                    this.noteBody.style.transformOrigin = 'center top';
+                    this.noteBody.style.maxWidth = '100%';
+                    this.noteBody.style.width = '100%';
+                    this.noteBody.style.boxSizing = 'border-box';
+                    // Remover qualquer altura fixa para permitir crescimento natural
+                    this.noteBody.style.height = 'auto';
+                }
+            }
+
+            setupEventListeners() {
+                // Event listeners para os botões de zoom
+                const zoomInBtn = document.getElementById('zoom-in-btn');
+                const zoomOutBtn = document.getElementById('zoom-out-btn');
+
+                if (zoomInBtn) {
+                    zoomInBtn.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        this.zoomIn();
+                    });
+                }
+
+                if (zoomOutBtn) {
+                    zoomOutBtn.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        this.zoomOut();
+                    });
+                }
+
+                // Keyboard shortcuts
+                document.addEventListener('keydown', (e) => {
+                    // Só funciona se estiver no editor
+                    const editorView = document.getElementById('note-editor-view');
+                    if (!editorView || editorView.classList.contains('view-hidden')) {
+                        return;
+                    }
+
+                    if (e.ctrlKey || e.metaKey) {
+                        if (e.key === '=' || e.key === '+') {
+                            e.preventDefault();
+                            this.zoomIn();
+                        } else if (e.key === '-') {
+                            e.preventDefault();
+                            this.zoomOut();
+                        } else if (e.key === '0') {
+                            e.preventDefault();
+                            this.resetZoom();
+                        }
+                    }
+                });
+
+                console.log('🔍 Event listeners do zoom configurados');
+            }
+
+            // Implementação de zoom melhorada - CORRIGIDA PARA PDFs
+            applyZoom(newScale) {
+                if (!this.noteBody) return;
+
+                // Armazenar a posição de scroll relativa
+                const container = document.querySelector('.note-editor-main');
+                const scrollRatio = container ? container.scrollTop / container.scrollHeight : 0;
+
+                // Aplicar zoom com transform scale ao container principal
+                this.noteBody.style.transform = `scale(${newScale})`;
+                this.noteBody.style.transformOrigin = 'center top';
+
+                // Ajustar largura para compensar o zoom
+                const adjustedWidth = newScale <= 1 ? '100%' : `${100 / newScale}%`;
+                this.noteBody.style.width = adjustedWidth;
+
+                // Centralizar quando zoom < 100%
+                if (newScale < 1) {
+                    const marginPercent = ((1 - newScale) / 2) * 100;
+                    this.noteBody.style.marginLeft = `${marginPercent}%`;
+                    this.noteBody.style.marginRight = `${marginPercent}%`;
+                } else {
+                    this.noteBody.style.marginLeft = '0';
+                    this.noteBody.style.marginRight = '0';
+                }
+
+                // CORREÇÃO: Aplicar zoom também às imagens de PDF
+                const pdfImages = this.noteBody.querySelectorAll('.pdf-page-image img');
+                pdfImages.forEach(img => {
+                    // Aplicar o mesmo scale às imagens de PDF para sincronizar o zoom
+                    img.style.transform = `scale(${newScale})`;
+                    img.style.transformOrigin = 'center top';
+
+                    // Ajustar o container da imagem para acomodar a escala
+                    const imageContainer = img.closest('.pdf-page-image');
+                    if (imageContainer) {
+                        // Ajustar o overflow para mostrar a imagem escalada corretamente
+                        imageContainer.style.overflow = 'visible';
+
+                        // Ajustar a margem para centralizar a imagem escalada
+                        if (newScale !== 1) {
+                            const marginAdjustment = `${(newScale - 1) * 50}%`;
+                            imageContainer.style.marginTop = marginAdjustment;
+                            imageContainer.style.marginBottom = marginAdjustment;
+                        } else {
+                            imageContainer.style.marginTop = '';
+                            imageContainer.style.marginBottom = '';
+                        }
+                    }
+                });
+
+                // Atualizar o valor do zoom atual
+                this.currentScale = newScale;
+                this.updateDisplay();
+
+                // Restaurar a posição de scroll relativa
+                if (container) {
+                    requestAnimationFrame(() => {
+                        container.scrollTop = container.scrollHeight * scrollRatio;
+                    });
+                }
+
+                console.log(`🔍 Zoom aplicado: ${Math.round(newScale * 100)}% (incluindo ${pdfImages.length} imagens PDF)`);
+            }
+
+            zoomIn() {
+                const newScale = Math.min(this.currentScale + this.zoomStep, this.maxScale);
+                if (newScale !== this.currentScale) {
+                    this.applyZoom(newScale);
+                }
+            }
+
+            zoomOut() {
+                const newScale = Math.max(this.currentScale - this.zoomStep, this.minScale);
+                if (newScale !== this.currentScale) {
+                    this.applyZoom(newScale);
+                }
+            }
+
+            resetZoom() {
+                this.applyZoom(1.0);
+            }
+
+            updateDisplay() {
+                if (this.zoomDisplayElement) {
+                    this.zoomDisplayElement.textContent = `${Math.round(this.currentScale * 100)}%`;
+                }
+            }
+
+            setZoom(scale) {
+                if (scale >= this.minScale && scale <= this.maxScale) {
+                    this.applyZoom(scale);
+                }
+            }
+
+            getCurrentZoom() {
+                return this.currentScale;
+            }
+        }
+
+        // Utility functions
+        function showLoading(text = 'Carregando...') {
+            const overlay = document.getElementById('loading-overlay');
+            const textEl = document.getElementById('loading-text');
+            if (textEl) textEl.textContent = text;
+            if (overlay) overlay.style.display = 'flex';
+        }
+
+        function hideLoading() {
+            const overlay = document.getElementById('loading-overlay');
+            if (overlay) overlay.style.display = 'none';
+        }
+
+        function showInfoModal(title, message, isError = true) {
+            const modal = document.getElementById('info-modal');
+            const titleEl = document.getElementById('info-modal-title');
+            const textEl = document.getElementById('info-modal-text');
+            const iconEl = document.getElementById('info-modal-icon');
+
+            if (titleEl) titleEl.textContent = title;
+            if (textEl) textEl.textContent = message;
+            if (iconEl) {
+                iconEl.className = isError
+                    ? 'fas fa-exclamation-triangle text-4xl mb-4 text-red-500'
+                    : 'fas fa-check-circle text-4xl mb-4 text-green-500';
+            }
+            if (modal) modal.classList.remove('hidden');
+        }
+
+        function hideInfoModal() {
+            const modal = document.getElementById('info-modal');
+            if (modal) modal.classList.add('hidden');
+        }
+
+        function showInputModal(title, placeholder = '', defaultValue = '') {
+            return new Promise((resolve, reject) => {
+                const modal = document.getElementById('input-modal');
+                const titleEl = document.getElementById('input-modal-title');
+                const field = document.getElementById('input-modal-field');
+
+                if (titleEl) titleEl.textContent = title;
+                if (field) {
+                    field.placeholder = placeholder;
+                    field.value = defaultValue;
+                }
+
+                window.inputModalResolve = resolve;
+                window.inputModalReject = reject;
+
+                if (modal) modal.classList.remove('hidden');
+                if (field) {
+                    field.focus();
+                    field.select();
+                }
+            });
+        }
+
+        function hideInputModal() {
+            const modal = document.getElementById('input-modal');
+            if (modal) modal.classList.add('hidden');
+
+            if (window.inputModalReject) {
+                window.inputModalReject(new Error('Modal cancelled'));
+                window.inputModalReject = null;
+                window.inputModalResolve = null;
+            }
+        }
+
+        function confirmInputModal() {
+            const field = document.getElementById('input-modal-field');
+            const value = field?.value || '';
+
+            if (window.inputModalResolve) {
+                window.inputModalResolve(value);
+                window.inputModalResolve = null;
+                window.inputModalReject = null;
+            }
+
+            hideInputModal();
+        }
+
+        function showDeleteConfirmModal(itemName) {
+            return new Promise((resolve, reject) => {
+                const modal = document.getElementById('delete-confirm-modal');
+                const textEl = document.getElementById('delete-modal-text');
+
+                if (textEl) {
+                    textEl.textContent = `Tem certeza que deseja excluir "${itemName}"?`;
+                }
+
+                window.deleteConfirmResolve = resolve;
+                window.deleteConfirmReject = reject;
+
+                if (modal) modal.classList.remove('hidden');
+            });
+        }
+
+        function hideDeleteConfirmModal() {
+            const modal = document.getElementById('delete-confirm-modal');
+            if (modal) modal.classList.add('hidden');
+
+            if (window.deleteConfirmReject) {
+                window.deleteConfirmReject(new Error('Delete cancelled'));
+                window.deleteConfirmReject = null;
+                window.deleteConfirmResolve = null;
+            }
+        }
+
+        function confirmDelete() {
+            if (window.deleteConfirmResolve) {
+                window.deleteConfirmResolve(true);
+                window.deleteConfirmResolve = null;
+                window.deleteConfirmReject = null;
+            }
+
+            hideDeleteConfirmModal();
+        }
+
+        function switchView(viewName) {
+            console.log('🔄 Trocando para view:', viewName);
+
+            const folderView = document.getElementById('folder-view');
+            const editorView = document.getElementById('note-editor-view');
+            const zoomControls = document.getElementById('zoom-controls');
+
+            if (viewName === 'folders') {
+                if (folderView) {
+                    folderView.className = 'view-container view-visible';
+                }
+                if (editorView) {
+                    editorView.className = 'view-container view-hidden';
+                }
+                if (zoomControls) {
+                    zoomControls.style.display = 'none';
+                }
+                console.log('✅ View trocada para: folders');
+            } else if (viewName === 'editor') {
+                if (folderView) {
+                    folderView.className = 'view-container view-hidden';
+                }
+                if (editorView) {
+                    editorView.className = 'view-container view-visible';
+                }
+                if (zoomControls) {
+                    zoomControls.style.display = 'flex';
+                }
+
+                // Initialize zoom controller when editor view becomes visible
+                if (window.app && window.app.zoomController) {
+                    setTimeout(() => {
+                        window.app.zoomController.init();
+                    }, 100);
+                }
+
+                console.log('✅ View trocada para: editor');
+            }
+        }
+
+        // Main App Class
+        class GeminiNotesApp {
+            constructor() {
+                this.supabase = null;
+                this.currentUserId = null;
+                this.activeNoteId = null;
+                this.currentFolderId = 'root';
+                this.breadcrumbPath = [{ id: 'root', name: 'Início' }];
+                this.saveTimeout = null;
+                this.zoomController = new ZoomController();
+            }
+
+            async init() {
+                try {
+                    console.log('🚀 Inicializando Gemini Notes com SOLUÇÃO GROK3...');
+                    showLoading('Inicializando...');
+
+                    // Initialize Supabase
+                    this.supabase = window.supabase.createClient(
+                        AppConfig.supabase.url,
+                        AppConfig.supabase.key
+                    );
+
+                    // Test connection
+                    const { data, error } = await this.supabase.from('notes').select('count').limit(1);
+                    if (error && error.code !== 'PGRST116') {
+                        throw new Error(`Erro de conexão: ${error.message}`);
+                    }
+                    console.log('✅ Supabase conectado');
+
+                    // Get or create user ID
+                    this.currentUserId = localStorage.getItem(AppConfig.storage.userIdKey);
+                    if (!this.currentUserId) {
+                        this.currentUserId = crypto.randomUUID();
+                        localStorage.setItem(AppConfig.storage.userIdKey, this.currentUserId);
+                        console.log('👤 Novo usuário criado:', this.currentUserId);
+                    }
+
+                    // Setup PDF.js
+                    if (window.pdfjsLib) {
+                        window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+                    }
+
+                    // Zoom controller will be initialized when editor view is activated
+
+                    this.setupEventListeners();
+                    this.setupTheme();
+
+                    await this.loadFolderContents(this.currentFolderId);
+                    this.renderBreadcrumbs();
+
+                    switchView('folders');
+
+                    console.log('🎉 App com SOLUÇÃO GROK3 inicializado com sucesso!');
+
+                } catch (error) {
+                    console.error('❌ Erro na inicialização:', error);
+                    showInfoModal('Erro de Inicialização', error.message);
+                } finally {
+                    hideLoading();
+                }
+            }
+
+            setupEventListeners() {
+                // Modal handlers
+                document.getElementById('info-modal-close')?.addEventListener('click', hideInfoModal);
+                document.getElementById('input-modal-cancel')?.addEventListener('click', hideInputModal);
+                document.getElementById('input-modal-confirm')?.addEventListener('click', confirmInputModal);
+                document.getElementById('cancel-delete-btn')?.addEventListener('click', hideDeleteConfirmModal);
+                document.getElementById('confirm-delete-btn')?.addEventListener('click', confirmDelete);
+
+                // Main buttons
+                document.getElementById('new-folder-btn')?.addEventListener('click', () => this.createNewFolder());
+
+                document.getElementById('back-to-folders-btn')?.addEventListener('click', () => this.closeEditor());
+                document.getElementById('delete-note-btn')?.addEventListener('click', () => this.deleteCurrentNote());
+                document.getElementById('export-pdf-btn')?.addEventListener('click', () => this.exportCurrentNote());
+
+                // PDF import
+                const importBtn = document.getElementById('import-pdf-btn');
+                const importInput = document.getElementById('import-pdf-input');
+                importBtn?.addEventListener('click', () => importInput?.click());
+                importInput?.addEventListener('change', (e) => this.handlePdfImport(e));
+
+                // Note editing
+                const titleEl = document.getElementById('note-title');
+                const bodyEl = document.getElementById('note-body');
+                titleEl?.addEventListener('input', () => this.scheduleAutoSave());
+                bodyEl?.addEventListener('input', () => this.scheduleAutoSave());
+
+                // Folder contents
+                const contentsEl = document.getElementById('folder-contents');
+                contentsEl?.addEventListener('click', (e) => this.handleItemClick(e));
+
+                // Theme toggle
+                document.getElementById('theme-toggle-btn')?.addEventListener('click', () => this.toggleTheme());
+            }
+
+            setupTheme() {
+                const savedTheme = localStorage.getItem(AppConfig.storage.themeKey) || 'light';
+                this.applyTheme(savedTheme);
+            }
+
+            toggleTheme() {
+                const isDarkMode = document.documentElement.classList.contains('dark');
+                const newTheme = isDarkMode ? 'light' : 'dark';
+                this.applyTheme(newTheme);
+            }
+
+            applyTheme(theme) {
+                const html = document.documentElement;
+                const themeIcon = document.getElementById('theme-icon');
+
+                if (theme === 'dark') {
+                    html.classList.add('dark');
+                    if (themeIcon) {
+                        themeIcon.classList.remove('fa-moon');
+                        themeIcon.classList.add('fa-sun');
+                    }
+                } else {
+                    html.classList.remove('dark');
+                    if (themeIcon) {
+                        themeIcon.classList.remove('fa-sun');
+                        themeIcon.classList.add('fa-moon');
+                    }
+                }
+
+                localStorage.setItem(AppConfig.storage.themeKey, theme);
+            }
+
+            handleItemClick(e) {
+                const card = e.target.closest('.item-grid-card');
+                if (!card) return;
+
+                const { itemId, itemType, itemName } = card.dataset;
+
+                if (itemType === 'folder') {
+                    this.breadcrumbPath.push({ id: itemId, name: itemName });
+                    this.renderBreadcrumbs();
+                    this.loadFolderContents(itemId);
+                } else if (itemType === 'note') {
+                    this.openNote(itemId);
+                }
+            }
+
+            async loadFolderContents(folderId) {
+                showLoading('Carregando...');
+                this.currentFolderId = folderId;
+
+                try {
+                    console.log('📁 Carregando pasta:', folderId);
+
+                    const [foldersResult, notesResult] = await Promise.all([
+                        this.supabase
+                            .from('folders')
+                            .select()
+                            .eq('user_id', this.currentUserId)
+                            .eq('parentId', folderId),
+                        this.supabase
+                            .from('notes')
+                            .select()
+                            .eq('user_id', this.currentUserId)
+                            .eq('folderId', folderId)
+                    ]);
+
+                    if (foldersResult.error) throw foldersResult.error;
+                    if (notesResult.error) throw notesResult.error;
+
+                    const items = [
+                        ...foldersResult.data.map(f => ({ ...f, type: 'folder' })),
+                        ...notesResult.data.map(n => ({ ...n, type: 'note' }))
+                    ];
+
+                    console.log(`📊 Carregados ${items.length} itens`);
+                    this.renderFolderContents(items);
+
+                } catch (error) {
+                    console.error("❌ Erro ao carregar conteúdo:", error);
+                    showInfoModal("Erro ao Carregar", "Não foi possível carregar o conteúdo: " + error.message);
+                } finally {
+                    hideLoading();
+                }
+            }
+
+            renderFolderContents(items) {
+                const contentsEl = document.getElementById('folder-contents');
+                if (!contentsEl) return;
+
+                items.sort((a, b) => {
+                    if (a.type === 'folder' && b.type !== 'folder') return -1;
+                    if (a.type !== 'folder' && b.type === 'folder') return 1;
+                    return (a.name || a.title).localeCompare(b.name || b.title);
+                });
+
+                if (items.length > 0) {
+                    contentsEl.innerHTML = items.map(item => this.renderItem(item)).join('');
+                } else {
+                    contentsEl.innerHTML = `
+                        <div class="col-span-full text-center text-gray-500 dark:text-gray-400 mt-16">
+                            <i class="fas fa-box-open text-6xl text-gray-300 dark:text-gray-600"></i>
+                            <p class="mt-4 text-2xl font-semibold">VAZIO AINDA :(</p>
+                            <p class="mt-1 text-gray-400 dark:text-gray-500">Importe um PDF ou crie uma pasta para começar.</p>
+                        </div>
+                    `;
+                }
+            }
+
+            renderItem(item) {
+                const itemName = item.name || item.title || (item.type === 'note' ? 'Nota sem título' : 'Pasta sem nome');
+                const cardBaseClasses = "item-grid-card flex flex-col p-4 bg-white dark:bg-gray-800 rounded-lg shadow cursor-pointer aspect-square";
+
+                if (item.type === 'folder') {
+                    return `
+                        <div class="${cardBaseClasses} justify-between" 
+                             data-item-id="${item.id}" 
+                             data-item-type="folder" 
+                             data-item-name="${itemName}">
+                            <div><i class="fas fa-folder text-5xl text-blue-400"></i></div>
+                            <span class="font-medium truncate w-full pt-2 text-gray-800 dark:text-gray-200">${itemName}</span>
+                        </div>
+                    `;
+                } else {
+                    const tempDiv = document.createElement('div');
+                    tempDiv.innerHTML = item.body || '';
+                    const previewText = item.pdfUrl
+                        ? `[PDF] ${itemName}`
+                        : (tempDiv.textContent.trim().substring(0, 100) || 'Nenhum conteúdo');
+
+                    return `
+                        <div class="${cardBaseClasses}" 
+                             data-item-id="${item.id}" 
+                             data-item-type="note" 
+                             data-item-name="${itemName}">
+                            <h3 class="font-bold text-lg mb-1 truncate text-gray-900 dark:text-gray-100">${itemName}</h3>
+                            <p class="text-sm text-gray-600 dark:text-gray-400 flex-grow clamp-3">${previewText}</p>
+                        </div>
+                    `;
+                }
+            }
+
+            renderBreadcrumbs() {
+                const breadcrumbsEl = document.getElementById('breadcrumbs');
+                if (!breadcrumbsEl) return;
+
+                breadcrumbsEl.innerHTML = this.breadcrumbPath.map((crumb, index) => {
+                    if (index === this.breadcrumbPath.length - 1) {
+                        return `<span class="font-semibold text-gray-800 dark:text-gray-100">${crumb.name}</span>`;
+                    }
+                    return `<a href="#" data-crumb-id="${crumb.id}" class="hover:underline dark:text-gray-300">${crumb.name}</a> <i class="fas fa-chevron-right text-gray-400"></i>`;
+                }).join('');
+            }
+
+            async createNewFolder() {
+                try {
+                    const name = await showInputModal("Nova Pasta", "Nome da pasta");
+                    if (!name.trim()) return;
+
+                    console.log('📁 Criando nova pasta:', name);
+
+                    const { error } = await this.supabase
+                        .from('folders')
+                        .insert({
+                            name: name.trim(),
+                            parentId: this.currentFolderId,
+                            user_id: this.currentUserId
+                        });
+
+                    if (error) throw error;
+
+                    console.log('✅ Pasta criada com sucesso');
+                    await this.loadFolderContents(this.currentFolderId);
+
+                } catch (error) {
+                    if (error.message !== 'Modal cancelled') {
+                        showInfoModal("Erro", "Não foi possível criar a pasta: " + error.message);
+                    }
+                }
+            }
+
+
+
+            async openNote(noteId) {
+                this.activeNoteId = noteId;
+
+                try {
+                    console.log('📖 Abrindo nota:', noteId);
+                    showLoading('Carregando nota...');
+
+                    const { data: note, error } = await this.supabase
+                        .from('notes')
+                        .select()
+                        .eq('id', noteId)
+                        .single();
+
+                    if (error || !note) {
+                        showInfoModal("Erro", "Não foi possível encontrar a nota.");
+                        this.closeEditor();
+                        return;
+                    }
+
+                    // Preencher campos da nota
+                    const titleEl = document.getElementById('note-title');
+                    const bodyEl = document.getElementById('note-body');
+                    const statusEl = document.getElementById('save-status');
+
+                    if (titleEl) titleEl.value = note.title || '';
+
+                    if (bodyEl) {
+                        if (note.pdfUrl) {
+                            bodyEl.innerHTML = '<p>Carregando PDF...</p>';
+                            await this.renderPdfInEditor(note.pdfUrl, bodyEl);
+                        } else {
+                            bodyEl.innerHTML = note.body || '<p>Digite aqui o conteúdo da sua nota...</p>';
+                        }
+                    }
+
+                    if (statusEl) {
+                        statusEl.textContent = `Última atualização: ${new Date(note.created_at).toLocaleString()}`;
+                    }
+
+                    // Reset zoom when opening note
+                    this.zoomController.setZoom(1.0);
+
+                    hideLoading();
+                    switchView('editor');
+
+                    console.log('✅ Nota aberta com sucesso');
+
+                } catch (error) {
+                    console.error('❌ Erro ao abrir nota:', error);
+                    showInfoModal("Erro", "Não foi possível abrir a nota: " + error.message);
+                    hideLoading();
+                }
+            }
+
+            async renderPdfInEditor(pdfUrl, bodyElement) {
+                if (!pdfUrl || !bodyElement) {
+                    console.error('❌ PDF URL ou elemento body não fornecido');
+                    return;
+                }
+
+                showLoading('Renderizando PDF...');
+
+                try {
+                    console.log('📄 Iniciando renderização do PDF:', pdfUrl);
+
+                    if (!window.pdfjsLib) {
+                        throw new Error('PDF.js não está carregado');
+                    }
+
+                    const loadingTask = window.pdfjsLib.getDocument({
+                        url: pdfUrl,
+                        cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/cmaps/',
+                        cMapPacked: true
+                    });
+
+                    const pdf = await loadingTask.promise;
+                    console.log(`📄 PDF carregado: ${pdf.numPages} páginas`);
+
+                    let htmlContent = `
+                        <div class="pdf-container">
+                            <div class="pdf-header">
+                                <h3>📄 Documento PDF Importado</h3>
+                                <p class="text-sm text-gray-600 dark:text-gray-400">
+                                    ${pdf.numPages} página${pdf.numPages > 1 ? 's' : ''} • 
+                                    Você pode adicionar suas anotações abaixo de cada página
+                                </p>
+                            </div>
+                            <hr class="my-4">
+                        </div>
+                    `;
+
+                    for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+                        showLoading(`Renderizando página ${pageNum} de ${pdf.numPages}...`);
+
+                        try {
+                            const page = await pdf.getPage(pageNum);
+                            const viewport = page.getViewport({ scale: 1.5 });
+
+                            const canvas = document.createElement('canvas');
+                            const context = canvas.getContext('2d');
+                            canvas.height = viewport.height;
+                            canvas.width = viewport.width;
+
+                            const renderContext = {
+                                canvasContext: context,
+                                viewport: viewport
+                            };
+
+                            await page.render(renderContext).promise;
+
+                            const imgDataUrl = canvas.toDataURL('image/jpeg', 0.9);
+
+                            htmlContent += `
+                                <div class="pdf-page-container mb-8">
+                                    <div class="pdf-page-header">
+                                        <h4 class="text-lg font-semibold mb-2">Página ${pageNum}</h4>
+                                    </div>
+                                    <div class="pdf-page-image mb-4">
+                                        <img src="${imgDataUrl}" 
+                                             alt="Página ${pageNum} do PDF" 
+                                             class="w-full border rounded-lg shadow-sm"/>
+                                    </div>
+                                    <div class="pdf-page-notes">
+                                        <h5 class="font-medium mb-2">📝 Suas anotações para a página ${pageNum}:</h5>
+                                        <div class="notes-area p-3 border rounded-lg bg-gray-50 dark:bg-gray-800 min-h-[100px]" 
+                                             contenteditable="true">
+                                             Clique aqui para adicionar suas anotações sobre esta página...
+                                        </div>
+                                    </div>
+                                </div>
+                            `;
+
+                            console.log(`✅ Página ${pageNum} renderizada`);
+
+                        } catch (pageError) {
+                            console.error(`❌ Erro ao renderizar página ${pageNum}:`, pageError);
+                            htmlContent += `
+                                <div class="pdf-page-error mb-4 p-4 border border-red-300 rounded-lg bg-red-50 dark:bg-red-900">
+                                    <p class="text-red-600 dark:text-red-300">
+                                        ❌ Erro ao carregar página ${pageNum}: ${pageError.message}
+                                    </p>
+                                </div>
+                            `;
+                        }
+                    }
+
+                    htmlContent += `
+                        <div class="pdf-footer mt-8 pt-4 border-t">
+                            <p class="text-sm text-gray-500 dark:text-gray-400">
+                                📄 Fim do documento PDF • Suas anotações são salvas automaticamente
+                            </p>
+                        </div>
+                    `;
+
+                    bodyElement.innerHTML = htmlContent;
+
+                    console.log('✅ PDF renderizado com sucesso no editor');
+
+                } catch (error) {
+                    console.error('❌ Erro ao renderizar PDF:', error);
+
+                    bodyElement.innerHTML = `
+                        <div class="pdf-error p-6 border border-red-300 rounded-lg bg-red-50 dark:bg-red-900">
+                            <h3 class="text-lg font-semibold text-red-600 dark:text-red-300 mb-2">
+                                ❌ Erro ao Carregar PDF
+                            </h3>
+                            <p class="text-red-600 dark:text-red-300 mb-4">
+                                Não foi possível carregar o arquivo PDF: ${error.message}
+                            </p>
+                            <div class="pdf-fallback">
+                                <h4 class="font-medium mb-2">📄 Link do arquivo:</h4>
+                                <a href="${pdfUrl}" 
+                                   target="_blank" 
+                                   class="text-blue-600 dark:text-blue-400 hover:underline">
+                                    Abrir PDF em nova aba
+                                </a>
+                                <div class="mt-4">
+                                    <h5 class="font-medium mb-2">📝 Suas anotações:</h5>
+                                    <div class="notes-area p-3 border rounded-lg bg-white dark:bg-gray-800 min-h-[200px]" 
+                                         contenteditable="true">
+                                        Adicione suas anotações sobre o PDF aqui...
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+
+                    showInfoModal(
+                        "Erro ao Carregar PDF",
+                        `Não foi possível carregar o PDF: ${error.message}. O link para o arquivo foi adicionado na nota.`
+                    );
+
+                } finally {
+                    hideLoading();
+                }
+            }
+
+            closeEditor() {
+                console.log('🔙 Fechando editor');
+                this.activeNoteId = null;
+                if (this.saveTimeout) {
+                    clearTimeout(this.saveTimeout);
+                    this.saveTimeout = null;
+                }
+                switchView('folders');
+            }
+
+            scheduleAutoSave() {
+                if (!this.activeNoteId) return;
+
+                if (this.saveTimeout) clearTimeout(this.saveTimeout);
+
+                const statusEl = document.getElementById('save-status');
+                if (statusEl) statusEl.textContent = 'Salvando...';
+
+                this.saveTimeout = setTimeout(async () => {
+                    try {
+                        const titleEl = document.getElementById('note-title');
+                        const bodyEl = document.getElementById('note-body');
+
+                        const { error } = await this.supabase
+                            .from('notes')
+                            .update({
+                                title: titleEl?.value || 'Nota sem título',
+                                body: bodyEl?.innerHTML || ''
+                            })
+                            .eq('id', this.activeNoteId);
+
+                        if (error) throw error;
+
+                        if (statusEl) {
+                            statusEl.textContent = `Salvo às ${new Date().toLocaleTimeString()}`;
+                        }
+
+                        console.log('💾 Nota salva automaticamente');
+
+                    } catch (error) {
+                        console.error('❌ Erro ao salvar:', error);
+                        if (statusEl) statusEl.textContent = 'Erro ao salvar.';
+                        showInfoModal("Erro ao Salvar", "Não foi possível salvar a nota: " + error.message);
+                    }
+                }, 1000);
+            }
+
+            async deleteCurrentNote() {
+                if (!this.activeNoteId) return;
+
+                try {
+                    const titleEl = document.getElementById('note-title');
+                    const noteName = titleEl?.value || 'Nota sem título';
+
+                    await showDeleteConfirmModal(noteName);
+
+                    console.log('🗑️ Excluindo nota:', this.activeNoteId);
+
+                    const { data: note } = await this.supabase
+                        .from('notes')
+                        .select('pdfUrl')
+                        .eq('id', this.activeNoteId)
+                        .single();
+
+                    if (note && note.pdfUrl) {
+                        const filePath = new URL(note.pdfUrl).pathname.split('/public/pdfs/')[1];
+                        await this.supabase.storage.from('pdfs').remove([filePath]);
+                    }
+
+                    await this.supabase.from('notes').delete().eq('id', this.activeNoteId);
+
+                    console.log('✅ Nota excluída com sucesso');
+                    this.closeEditor();
+                    await this.loadFolderContents(this.currentFolderId);
+
+                } catch (error) {
+                    if (error.message !== 'Delete cancelled') {
+                        showInfoModal("Erro", "Não foi possível excluir a nota: " + error.message);
+                    }
+                }
+            }
+
+            async handlePdfImport(event) {
+                const file = event.target.files[0];
+                if (!file || file.type !== 'application/pdf') {
+                    showInfoModal("Erro", "Por favor, selecione um arquivo PDF válido.");
+                    return;
+                }
+
+                showLoading('Importando PDF...');
+
+                try {
+                    console.log('📄 Importando PDF:', file.name);
+
+                    const filePath = `${this.currentUserId}/${Date.now()}_${file.name}`;
+
+                    const { error: uploadError } = await this.supabase.storage
+                        .from('pdfs')
+                        .upload(filePath, file);
+
+                    if (uploadError) throw uploadError;
+
+                    const { data: { publicUrl } } = this.supabase.storage
+                        .from('pdfs')
+                        .getPublicUrl(filePath);
+
+                    const title = file.name.replace(/\.pdf$/i, '');
+                    const { data: newNote, error: insertError } = await this.supabase
+                        .from('notes')
+                        .insert({
+                            title: title,
+                            body: '<p>Carregando PDF...</p>',
+                            pdfUrl: publicUrl,
+                            folderId: this.currentFolderId,
+                            user_id: this.currentUserId
+                        })
+                        .select()
+                        .single();
+
+                    if (insertError) throw insertError;
+
+                    console.log('✅ PDF importado com sucesso');
+
+                    await this.loadFolderContents(this.currentFolderId);
+                    showInfoModal("Sucesso", "PDF importado com sucesso! Clique na nota para visualizar.", false);
+
+                } catch (error) {
+                    console.error('❌ Erro na importação:', error);
+                    showInfoModal("Erro de Importação", "Não foi possível importar o arquivo: " + error.message);
+                } finally {
+                    hideLoading();
+                    const importInput = document.getElementById('import-pdf-input');
+                    if (importInput) importInput.value = '';
+                }
+            }
+
+            async exportCurrentNote() {
+                if (!this.activeNoteId) return;
+
+                const bodyEl = document.getElementById('note-body');
+                if (!bodyEl) return;
+
+                showLoading('Exportando...');
+
+                try {
+                    console.log('📤 Exportando nota para PDF...');
+
+                    // Temporarily reset zoom for export
+                    const currentZoom = this.zoomController.getCurrentZoom();
+                    this.zoomController.setZoom(1.0);
+
+                    const backgroundColor = document.documentElement.classList.contains('dark') ? '#1f2937' : '#ffffff';
+
+                    const canvas = await window.html2canvas(bodyEl, {
+                        scale: 2,
+                        useCORS: true,
+                        backgroundColor: backgroundColor
+                    });
+
+                    // Restore zoom after export
+                    this.zoomController.setZoom(currentZoom);
+
+                    const imgData = canvas.toDataURL('image/png');
+                    const { jsPDF } = window.jspdf;
+                    const pdf = new jsPDF('p', 'mm', 'a4');
+
+                    const pdfWidth = pdf.internal.pageSize.getWidth();
+                    const pdfHeight = pdf.internal.pageSize.getHeight();
+                    const canvasWidth = canvas.width;
+                    const canvasHeight = canvas.height;
+                    const ratio = canvasWidth / canvasHeight;
+                    const imgHeight = pdfWidth / ratio;
+
+                    let heightLeft = imgHeight;
+                    let position = 0;
+
+                    pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, imgHeight);
+                    heightLeft -= pdfHeight;
+
+                    while (heightLeft > 0) {
+                        position = heightLeft - imgHeight;
+                        pdf.addPage();
+                        pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, imgHeight);
+                        heightLeft -= pdfHeight;
+                    }
+
+                    const titleEl = document.getElementById('note-title');
+                    const fileName = (titleEl?.value || 'nota').replace(/[^a-z0-9]/gi, '_').toLowerCase() + ".pdf";
+                    pdf.save(fileName);
+
+                    console.log('✅ PDF exportado com sucesso');
+                    showInfoModal("Sucesso", "PDF exportado com sucesso!", false);
+
+                } catch (error) {
+                    console.error('❌ Erro na exportação:', error);
+                    showInfoModal("Erro", "Não foi possível exportar o PDF: " + error.message);
+                } finally {
+                    hideLoading();
+                }
+            }
+        }
+
+        // Initialize app when DOM is loaded
+        document.addEventListener('DOMContentLoaded', async () => {
+            console.log('🚀 Inicializando Gemini Notes com SOLUÇÃO GROK3...');
+
+            try {
+                window.app = new GeminiNotesApp();
+                await window.app.init();
+
+                console.log('🎉 Gemini Notes com SOLUÇÃO GROK3 inicializado com sucesso!');
+
+            } catch (error) {
+                console.error('❌ Erro crítico na inicialização:', error);
+
+                const errorDiv = document.createElement('div');
+                errorDiv.className = 'fixed inset-0 bg-red-500 text-white flex items-center justify-center z-50';
+                errorDiv.innerHTML = `
+                    <div class="text-center p-8">
+                        <i class="fas fa-exclamation-triangle text-6xl mb-4"></i>
+                        <h1 class="text-2xl font-bold mb-2">Erro de Inicialização</h1>
+                        <p class="mb-4">Não foi possível inicializar o aplicativo:</p>
+                        <p class="text-sm bg-red-600 p-2 rounded">${error.message}</p>
+                        <button onclick="location.reload()" class="mt-4 px-4 py-2 bg-white text-red-500 rounded hover:bg-gray-100">
+                            Tentar Novamente
+                        </button>
+                    </div>
+                `;
+                document.body.appendChild(errorDiv);
+            }
+        });
+    </script>
+</body>
+
+</html>
