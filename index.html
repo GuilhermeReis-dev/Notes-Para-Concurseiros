@@ -340,6 +340,47 @@
                     </div>
                 </div>
             </main>
+            
+            <!-- Annotation Toolbar -->
+            <div id="annotation-toolbar" class="annotation-toolbar hidden">
+                <div class="toolbar-section">
+                    <h4 class="toolbar-title">Caneta</h4>
+                    <div class="color-palette">
+                        <button class="color-btn active" data-color="#FFFFFF" style="background-color: #FFFFFF" title="Branco"></button>
+                        <button class="color-btn" data-color="#000000" style="background-color: #000000" title="Preto"></button>
+                        <button class="color-btn" data-color="#3B82F6" style="background-color: #3B82F6" title="Azul"></button>
+                        <button class="color-btn" data-color="#22C55E" style="background-color: #22C55E" title="Verde"></button>
+                        <button class="color-btn" data-color="#EF4444" style="background-color: #EF4444" title="Vermelho"></button>
+                        <button class="color-btn" data-color="#EAB308" style="background-color: #EAB308" title="Amarelo"></button>
+                    </div>
+                    <div class="line-width-controls">
+                        <button class="width-btn" data-width="1" title="Fina">
+                            <div class="width-preview" style="height: 2px; background-color: #FFFFFF;"></div>
+                        </button>
+                        <button class="width-btn active" data-width="2" title="Média">
+                            <div class="width-preview" style="height: 3px; background-color: #FFFFFF;"></div>
+                        </button>
+                        <button class="width-btn" data-width="4" title="Grossa">
+                            <div class="width-preview" style="height: 5px; background-color: #FFFFFF;"></div>
+                        </button>
+                    </div>
+                </div>
+                <div class="toolbar-section">
+                    <h4 class="toolbar-title">Ferramentas</h4>
+                    <div class="tool-buttons">
+                        <button class="tool-btn active" data-tool="pen" title="Caneta">
+                            <i class="fas fa-pen"></i>
+                        </button>
+                        <button class="tool-btn" data-tool="eraser" title="Borracha">
+                            <i class="fas fa-eraser"></i>
+                        </button>
+                        <button class="tool-btn" data-tool="clear" title="Limpar Página">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
             <footer
                 class="p-2 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 text-right text-sm text-gray-400 dark:text-gray-500">
                 <span id="save-status">Pronto para editar</span>
@@ -775,6 +816,457 @@
             }
         }
 
+        // PDF Annotation Class
+        class PDFAnnotation {
+            constructor(app) {
+                this.app = app;
+                this.isDrawing = false;
+                this.currentTool = 'pen';
+                this.currentColor = '#FFFFFF';
+                this.currentLineWidth = 2;
+                this.annotations = new Map(); // pageId -> annotation data
+                this.canvases = new Map(); // pageId -> canvas element
+                this.contexts = new Map(); // pageId -> 2d context
+                this.activeNoteId = null;
+                this.saveTimeout = null;
+                
+                this.setupEventListeners();
+            }
+
+            setupEventListeners() {
+                document.addEventListener('click', (e) => {
+                    // Color selection
+                    if (e.target.classList.contains('color-btn')) {
+                        this.setColor(e.target.dataset.color);
+                    }
+                    
+                    // Line width selection
+                    if (e.target.closest('.width-btn')) {
+                        const btn = e.target.closest('.width-btn');
+                        this.setLineWidth(parseInt(btn.dataset.width));
+                    }
+                    
+                    // Tool selection
+                    if (e.target.closest('.tool-btn')) {
+                        const btn = e.target.closest('.tool-btn');
+                        const tool = btn.dataset.tool;
+                        if (tool === 'clear') {
+                            this.clearCurrentPage();
+                        } else {
+                            this.setTool(tool);
+                        }
+                    }
+                });
+            }
+
+            setColor(color) {
+                this.currentColor = color;
+                this.updateColorButtons();
+                this.updateWidthPreviews();
+            }
+
+            setLineWidth(width) {
+                this.currentLineWidth = width;
+                this.updateWidthButtons();
+            }
+
+            setTool(tool) {
+                this.currentTool = tool;
+                this.updateToolButtons();
+                this.updateCanvasCursors();
+            }
+
+            updateColorButtons() {
+                document.querySelectorAll('.color-btn').forEach(btn => {
+                    btn.classList.toggle('active', btn.dataset.color === this.currentColor);
+                });
+            }
+
+            updateWidthButtons() {
+                document.querySelectorAll('.width-btn').forEach(btn => {
+                    btn.classList.toggle('active', parseInt(btn.dataset.width) === this.currentLineWidth);
+                });
+            }
+
+            updateWidthPreviews() {
+                document.querySelectorAll('.width-preview').forEach(preview => {
+                    preview.style.backgroundColor = this.currentColor;
+                });
+            }
+
+            updateToolButtons() {
+                document.querySelectorAll('.tool-btn').forEach(btn => {
+                    btn.classList.toggle('active', btn.dataset.tool === this.currentTool);
+                });
+            }
+
+            updateCanvasCursors() {
+                const canvases = document.querySelectorAll('.annotation-canvas');
+                canvases.forEach(canvas => {
+                    canvas.classList.toggle('eraser-mode', this.currentTool === 'eraser');
+                });
+            }
+
+            setupPdfPageAnnotation(pageImage, pageIndex) {
+                // Create container for page and canvas
+                const container = document.createElement('div');
+                container.className = 'pdf-page-container';
+                container.setAttribute('data-page', pageIndex);
+
+                // Move the image into the container
+                const parent = pageImage.parentNode;
+                parent.insertBefore(container, pageImage);
+                container.appendChild(pageImage);
+
+                // Create canvas overlay
+                const canvas = document.createElement('canvas');
+                canvas.className = 'annotation-canvas';
+                canvas.setAttribute('data-page', pageIndex);
+                
+                // Set canvas size to match image
+                const updateCanvasSize = () => {
+                    const rect = pageImage.getBoundingClientRect();
+                    canvas.width = pageImage.naturalWidth || rect.width;
+                    canvas.height = pageImage.naturalHeight || rect.height;
+                    canvas.style.width = rect.width + 'px';
+                    canvas.style.height = rect.height + 'px';
+                };
+
+                // Update size when image loads
+                if (pageImage.complete) {
+                    updateCanvasSize();
+                } else {
+                    pageImage.addEventListener('load', updateCanvasSize);
+                }
+
+                // Add canvas to container
+                container.appendChild(canvas);
+
+                // Setup canvas drawing
+                this.setupCanvasDrawing(canvas, pageIndex);
+
+                // Store canvas reference
+                const pageId = `${this.activeNoteId}_${pageIndex}`;
+                this.canvases.set(pageId, canvas);
+                this.contexts.set(pageId, canvas.getContext('2d'));
+
+                // Load existing annotations
+                this.loadPageAnnotations(pageIndex);
+
+                return container;
+            }
+
+            setupCanvasDrawing(canvas, pageIndex) {
+                const ctx = canvas.getContext('2d');
+                let isDrawing = false;
+                let currentPath = [];
+
+                const getEventPos = (e) => {
+                    const rect = canvas.getBoundingClientRect();
+                    const scaleX = canvas.width / rect.width;
+                    const scaleY = canvas.height / rect.height;
+                    
+                    return {
+                        x: (e.clientX - rect.left) * scaleX,
+                        y: (e.clientY - rect.top) * scaleY
+                    };
+                };
+
+                const startDrawing = (e) => {
+                    if (this.currentTool === 'pen' || this.currentTool === 'eraser') {
+                        isDrawing = true;
+                        const pos = getEventPos(e);
+                        currentPath = [pos];
+                        
+                        if (this.currentTool === 'pen') {
+                            ctx.globalCompositeOperation = 'source-over';
+                            ctx.strokeStyle = this.currentColor;
+                            ctx.lineWidth = this.currentLineWidth;
+                        } else {
+                            ctx.globalCompositeOperation = 'destination-out';
+                            ctx.lineWidth = this.currentLineWidth * 3;
+                        }
+                        
+                        ctx.lineCap = 'round';
+                        ctx.lineJoin = 'round';
+                        ctx.beginPath();
+                        ctx.moveTo(pos.x, pos.y);
+                    }
+                };
+
+                const draw = (e) => {
+                    if (!isDrawing || (this.currentTool !== 'pen' && this.currentTool !== 'eraser')) return;
+                    
+                    const pos = getEventPos(e);
+                    currentPath.push(pos);
+                    
+                    ctx.lineTo(pos.x, pos.y);
+                    ctx.stroke();
+                };
+
+                const stopDrawing = () => {
+                    if (isDrawing && currentPath.length > 1) {
+                        // Save the stroke to annotations
+                        this.saveStroke(pageIndex, {
+                            tool: this.currentTool,
+                            color: this.currentColor,
+                            lineWidth: this.currentLineWidth,
+                            path: currentPath
+                        });
+                    }
+                    isDrawing = false;
+                    currentPath = [];
+                };
+
+                // Mouse events
+                canvas.addEventListener('mousedown', startDrawing);
+                canvas.addEventListener('mousemove', draw);
+                canvas.addEventListener('mouseup', stopDrawing);
+                canvas.addEventListener('mouseout', stopDrawing);
+
+                // Touch events
+                canvas.addEventListener('touchstart', (e) => {
+                    e.preventDefault();
+                    const touch = e.touches[0];
+                    const mouseEvent = new MouseEvent('mousedown', {
+                        clientX: touch.clientX,
+                        clientY: touch.clientY
+                    });
+                    canvas.dispatchEvent(mouseEvent);
+                });
+
+                canvas.addEventListener('touchmove', (e) => {
+                    e.preventDefault();
+                    const touch = e.touches[0];
+                    const mouseEvent = new MouseEvent('mousemove', {
+                        clientX: touch.clientX,
+                        clientY: touch.clientY
+                    });
+                    canvas.dispatchEvent(mouseEvent);
+                });
+
+                canvas.addEventListener('touchend', (e) => {
+                    e.preventDefault();
+                    const mouseEvent = new MouseEvent('mouseup', {});
+                    canvas.dispatchEvent(mouseEvent);
+                });
+            }
+
+            saveStroke(pageIndex, strokeData) {
+                const pageId = `${this.activeNoteId}_${pageIndex}`;
+                if (!this.annotations.has(pageId)) {
+                    this.annotations.set(pageId, []);
+                }
+                this.annotations.get(pageId).push(strokeData);
+                
+                // Auto-save with debounce
+                this.scheduleAnnotationSave();
+            }
+
+            scheduleAnnotationSave() {
+                if (this.saveTimeout) {
+                    clearTimeout(this.saveTimeout);
+                }
+                
+                this.saveTimeout = setTimeout(() => {
+                    this.saveAnnotationsToNote();
+                }, 1000);
+            }
+
+            async saveAnnotationsToNote() {
+                if (!this.activeNoteId || this.annotations.size === 0) return;
+
+                try {
+                    const annotationData = {};
+                    this.annotations.forEach((strokes, pageId) => {
+                        annotationData[pageId] = strokes;
+                    });
+
+                    // Get current note content
+                    const bodyEl = document.getElementById('note-body');
+                    if (!bodyEl) return;
+
+                    const currentBody = bodyEl.innerHTML;
+                    const updatedBody = this.embedAnnotationsInBody(currentBody, annotationData);
+
+                    // Update the note content (this will trigger the main app's auto-save)
+                    bodyEl.innerHTML = updatedBody;
+
+                    console.log('💾 Annotations saved to note content');
+
+                } catch (error) {
+                    console.error('❌ Error saving annotations:', error);
+                }
+            }
+
+            embedAnnotationsInBody(htmlBody, annotationData) {
+                // Create a marker to store annotation data
+                const annotationMarker = `<!-- ANNOTATIONS_DATA:${JSON.stringify(annotationData)} -->`;
+                
+                // Remove existing annotation data
+                const cleanBody = htmlBody.replace(/<!-- ANNOTATIONS_DATA:.*? -->/g, '');
+                
+                // Add new annotation data at the end
+                return cleanBody + annotationMarker;
+            }
+
+            extractAnnotationsFromBody(htmlBody) {
+                const match = htmlBody.match(/<!-- ANNOTATIONS_DATA:(.*?) -->/);
+                if (match) {
+                    try {
+                        return JSON.parse(match[1]);
+                    } catch (e) {
+                        console.error('Error parsing annotation data:', e);
+                    }
+                }
+                return {};
+            }
+
+            loadPageAnnotations(pageIndex) {
+                const pageId = `${this.activeNoteId}_${pageIndex}`;
+                const canvas = this.canvases.get(pageId);
+                const ctx = this.contexts.get(pageId);
+                
+                if (!canvas || !ctx) return;
+
+                // Clear canvas
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                // Get annotations for this page
+                const strokes = this.annotations.get(pageId) || [];
+                
+                // Redraw all strokes
+                strokes.forEach(stroke => {
+                    this.drawStroke(ctx, stroke);
+                });
+            }
+
+            drawStroke(ctx, stroke) {
+                if (!stroke.path || stroke.path.length < 2) return;
+
+                ctx.save();
+                
+                if (stroke.tool === 'pen') {
+                    ctx.globalCompositeOperation = 'source-over';
+                    ctx.strokeStyle = stroke.color;
+                    ctx.lineWidth = stroke.lineWidth;
+                } else if (stroke.tool === 'eraser') {
+                    ctx.globalCompositeOperation = 'destination-out';
+                    ctx.lineWidth = stroke.lineWidth * 3;
+                }
+                
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
+                ctx.beginPath();
+                
+                ctx.moveTo(stroke.path[0].x, stroke.path[0].y);
+                for (let i = 1; i < stroke.path.length; i++) {
+                    ctx.lineTo(stroke.path[i].x, stroke.path[i].y);
+                }
+                
+                ctx.stroke();
+                ctx.restore();
+            }
+
+            clearCurrentPage() {
+                // Find which page is currently visible/active
+                const canvases = document.querySelectorAll('.annotation-canvas');
+                canvases.forEach((canvas, index) => {
+                    const pageIndex = parseInt(canvas.getAttribute('data-page'));
+                    const pageId = `${this.activeNoteId}_${pageIndex}`;
+                    
+                    // Check if this canvas is in viewport
+                    const rect = canvas.getBoundingClientRect();
+                    const viewportHeight = window.innerHeight;
+                    const isVisible = rect.top < viewportHeight && rect.bottom > 0;
+                    
+                    if (isVisible) {
+                        // Clear this page
+                        const ctx = canvas.getContext('2d');
+                        ctx.clearRect(0, 0, canvas.width, canvas.height);
+                        
+                        // Clear annotations data
+                        this.annotations.set(pageId, []);
+                        
+                        // Save changes
+                        this.scheduleAnnotationSave();
+                    }
+                });
+            }
+
+            initializeForNote(noteId, noteBody) {
+                this.activeNoteId = noteId;
+                this.annotations.clear();
+                this.canvases.clear();
+                this.contexts.clear();
+
+                // Extract existing annotations from note body
+                if (noteBody) {
+                    const existingAnnotations = this.extractAnnotationsFromBody(noteBody);
+                    Object.entries(existingAnnotations).forEach(([pageId, strokes]) => {
+                        this.annotations.set(pageId, strokes);
+                    });
+                }
+
+                // Setup annotations for existing PDF pages
+                setTimeout(() => {
+                    this.setupAnnotationsForExistingPages();
+                }, 500);
+
+                // Show toolbar if note has PDF content
+                if (this.hasPdfContent(noteBody)) {
+                    this.showToolbar();
+                }
+            }
+
+            setupAnnotationsForExistingPages() {
+                const pdfImages = document.querySelectorAll('#note-body .pdf-page-image img');
+                pdfImages.forEach((img, index) => {
+                    if (!img.closest('.pdf-page-container')) {
+                        this.setupPdfPageAnnotation(img, index);
+                    }
+                });
+            }
+
+            showToolbar() {
+                const toolbar = document.getElementById('annotation-toolbar');
+                if (toolbar) {
+                    toolbar.classList.remove('hidden');
+                    console.log('📝 Annotation toolbar shown');
+                }
+            }
+
+            hideToolbar() {
+                const toolbar = document.getElementById('annotation-toolbar');
+                if (toolbar) {
+                    toolbar.classList.add('hidden');
+                    console.log('📝 Annotation toolbar hidden');
+                }
+            }
+
+            async closeAnnotations() {
+                // Save any pending annotations
+                if (this.saveTimeout) {
+                    clearTimeout(this.saveTimeout);
+                    await this.saveAnnotationsToNote();
+                }
+
+                // Hide toolbar
+                this.hideToolbar();
+
+                // Clear state
+                this.activeNoteId = null;
+                this.annotations.clear();
+                this.canvases.clear();
+                this.contexts.clear();
+            }
+
+            // Check if note has PDF content
+            hasPdfContent(noteBody) {
+                return noteBody && (noteBody.includes('pdf-page-image') || noteBody.includes('pdf-container') || noteBody.includes('PDF Importado'));
+            }
+        }
+
         // Main App Class
         class GeminiNotesApp {
             constructor() {
@@ -785,6 +1277,7 @@
                 this.breadcrumbPath = [{ id: 'root', name: 'Início' }];
                 this.saveTimeout = null;
                 this.zoomController = new ZoomController();
+                this.pdfAnnotation = new PDFAnnotation(this);
             }
 
             async init() {
@@ -1098,6 +1591,9 @@
                     // Reset zoom when opening note
                     this.zoomController.setZoom(1.0);
 
+                    // Initialize annotations for the note
+                    this.pdfAnnotation.initializeForNote(noteId, note.body);
+
                     hideLoading();
                     switchView('editor');
 
@@ -1212,6 +1708,12 @@
 
                     bodyElement.innerHTML = htmlContent;
 
+                    // Setup annotation canvases for PDF images
+                    setTimeout(() => {
+                        this.pdfAnnotation.setupAnnotationsForExistingPages();
+                        this.pdfAnnotation.showToolbar();
+                    }, 500);
+
                     console.log('✅ PDF renderizado com sucesso no editor');
 
                 } catch (error) {
@@ -1255,6 +1757,10 @@
 
             closeEditor() {
                 console.log('🔙 Fechando editor');
+                
+                // Close annotations
+                this.pdfAnnotation.closeAnnotations();
+                
                 this.activeNoteId = null;
                 if (this.saveTimeout) {
                     clearTimeout(this.saveTimeout);
